@@ -1,0 +1,14 @@
+name = "workdiary-push"
+main = "worker.js"
+compatibility_date = "2026-06-01"
+
+[triggers]
+crons = ["* * * * *"]   # 1분마다 알림 확인
+
+[vars]
+NTFY_SERVER = "https://ntfy.sh"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "workdiary"
+database_id = "50c22c37-65f6-4bee-8eeb-e2f3308d7bbe"   # npx wrangler d1 create workdiary 실행 후 나오는 ID
