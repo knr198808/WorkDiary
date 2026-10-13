@@ -7,6 +7,7 @@ crons = ["* * * * *"]   # 1분마다 알림 확인
 
 [vars]
 NTFY_SERVER = "https://ntfy.sh"
+VAPID_SUBJECT = "mailto:workdiary@users.noreply.github.com"
 
 [[d1_databases]]
 binding = "DB"

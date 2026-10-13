@@ -1,0 +1,50 @@
+# 태그(v1.0.1 같은)를 올리면 자동으로 exe를 빌드해서 GitHub Releases에 올립니다.
+# 사용자 PC의 프로그램은 Releases의 최신 버전을 보고 자동 업데이트합니다.
+name: Build & Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 버전 번호를 태그로 맞추기
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart("v")
+          (Get-Content WorkDiary.pyw -Encoding utf8) -replace '^APP_VERSION = ".*?"', "APP_VERSION = `"$ver`"" |
+            Set-Content WorkDiary.pyw -Encoding utf8
+
+      - name: 서버 주소 넣기 (GitHub 저장소 Secrets)
+        shell: pwsh
+        env:
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+          WORKER_KEY: ${{ secrets.WORKER_KEY }}
+        run: |
+          $c = Get-Content WorkDiary.pyw -Encoding utf8
+          $c = $c -replace '^GITHUB_REPO = ".*?"', "GITHUB_REPO = `"${{ github.repository }}`""
+          if ($env:WORKER_URL) { $c = $c -replace '^WORKER_URL = ".*?"', "WORKER_URL = `"$env:WORKER_URL`"" }
+          if ($env:WORKER_KEY) { $c = $c -replace '^WORKER_KEY = ".*?"', "WORKER_KEY = `"$env:WORKER_KEY`"" }
+          $c | Set-Content WorkDiary.pyw -Encoding utf8
+
+      - name: exe 빌드
+        run: |
+          pip install pyinstaller qrcode
+          pyinstaller --onefile --noconsole --name WorkDiary WorkDiary.pyw
+
+      - name: Release 올리기
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/WorkDiary.exe
+          generate_release_notes: true

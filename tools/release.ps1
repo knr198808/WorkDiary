@@ -18,6 +18,11 @@ if ($ver -notmatch "^v") { $ver = "v$ver" }
 $msg = Read-Host "변경 내용 한 줄 (사용자 업데이트 창에 표시)"
 if (-not $msg) { $msg = "$ver 업데이트" }
 
+# 빌드 설정(release.yml) 최신본을 .github/workflows 로 반영
+$wf = Join-Path $root ".github\workflows"
+New-Item -ItemType Directory -Force $wf | Out-Null
+if (Test-Path (Join-Path $root "release.yml")) { Copy-Item -Force (Join-Path $root "release.yml") (Join-Path $wf "release.yml") }
+
 git add -A
 git diff --cached --quiet
 if ($LASTEXITCODE -ne 0) { git commit -m $msg; if ($LASTEXITCODE -ne 0) { Fail "커밋 실패" } }

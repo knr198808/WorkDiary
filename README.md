@@ -16,11 +16,12 @@
 ## 사용하는 사람
 1. Releases에서 `WorkDiary.exe`를 받아 실행합니다. 새 버전이 나오면 자동으로 물어보고 업데이트돼요.
 2. 데이터는 `%APPDATA%\WorkDiary`에 저장되어 업데이트해도 유지됩니다.
-3. 폰 알림: 폰에 **ntfy** 앱 설치 → [📱 폰 알림 설정]의 토픽 이름을 앱에서 구독 → 테스트 발송.
-4. 어깨동무 회원 상세창을 띄운 상태에서 **F8** → 이름·전화·메모 전체를 가져옵니다.
+3. 폰 웹앱: [📱 폰 연결 · 웹앱] → 웹앱 탭의 **QR코드를 폰 카메라로 찍기** → 폰에서 일정·달력·회원·메모를 보고 등록·수정 (PC와 1분 안에 동기화) · [🔔 알림] 탭에서 알림 켜기. (앱 설치 필요 없음, 아이폰은 '홈 화면에 추가' 후)
+   - QR·링크에는 비밀 열쇠가 들어 있어요. 남에게 보내지 말고, 잃어버리면 [🔑 열쇠 바꾸기].
+4. 어깨동무 회원 상세창에서 **F8** → 집중관리 회원으로 가져오기 · 메인 목록에서 **F9** → 오늘 일정 바로 추가
 
 ## 폴더 구성
 - `WorkDiary.pyw` 프로그램 본체 / `실행.bat` 파이썬으로 바로 실행 / `build.bat` 내 PC에서 exe 만들기
-- `cloudflare/` 알림 서버 (worker.js, schema.sql, wrangler.toml)
+- `cloudflare/` 알림·동기화 서버 (worker.js, sync.js, webpush.js, schema.sql, wrangler.toml) · 폰 페이지는 `cloudflare/page/` 수정 후 `python build_page.py`
 - `tools/` 위 1~3번 bat가 실행하는 스크립트
 - `.github/workflows/release.yml` 태그를 올리면 exe를 빌드해 Releases에 올리는 설정 (2번 실행 시 자동 배치)

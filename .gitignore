@@ -6,3 +6,6 @@ __pycache__/
 cloudflare/.wrangler/
 cloudflare/node_modules/
 서버정보.txt
+ekdm_*.txt
+*.bmp
+error.log

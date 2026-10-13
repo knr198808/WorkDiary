@@ -40,7 +40,7 @@ jobs:
 
       - name: exe 빌드
         run: |
-          pip install pyinstaller
+          pip install pyinstaller qrcode
           pyinstaller --onefile --noconsole --name WorkDiary WorkDiary.pyw
 
       - name: Release 올리기
