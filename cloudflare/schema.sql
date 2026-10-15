@@ -65,3 +65,24 @@ CREATE TABLE IF NOT EXISTS records (
   PRIMARY KEY (device, kind, uid)
 );
 CREATE INDEX IF NOT EXISTS idx_rec_rev ON records(device, rev);
+
+-- 라이선스 (키 1개 = PC 1대)
+CREATE TABLE IF NOT EXISTS licenses (
+  key       TEXT PRIMARY KEY,           -- WD-XXXX-XXXX-XXXX
+  name      TEXT NOT NULL DEFAULT '',   -- 사용자 이름 (관리자가 적은 것)
+  user_name TEXT NOT NULL DEFAULT '',   -- 사용자가 키 입력할 때 직접 적은 이름
+  memo      TEXT NOT NULL DEFAULT '',
+  created   INTEGER,
+  expires   INTEGER NOT NULL DEFAULT 0, -- 만료(유닉스 시간), 0 = 무제한
+  revoked   INTEGER NOT NULL DEFAULT 0, -- 1 = 정지
+  capture   INTEGER NOT NULL DEFAULT 0, -- 1 = 화면 캡처 허용
+  owner     INTEGER NOT NULL DEFAULT 0, -- 1 = 관리자 본인 키
+  device    TEXT,                       -- 연결된 프로그램(기기 ID)
+  hwid      TEXT,                       -- 연결된 PC 고유값
+  pc_name   TEXT NOT NULL DEFAULT '',
+  bound_at  INTEGER,
+  last_seen INTEGER,
+  version   TEXT NOT NULL DEFAULT '',
+  last_ip   TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_lic_device ON licenses(device);

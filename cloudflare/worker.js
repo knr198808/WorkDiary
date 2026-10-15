@@ -14,12 +14,16 @@
  *  PC 프로그램 → POST /api/sync2      : 바뀐 것 올리고, 웹앱에서 바뀐 것 받아감 (알림도 서버가 계산)
  *  웹앱        → GET  /api/data?d=&k=&since= / POST /api/data   (k = PC QR코드에 든 비밀 열쇠)
  *
+ *  라이선스 (license.js) : PC → /api/lic/activate·check, 관리자 → /admin (ADMIN_PASS)
+ *  키가 정지·만료된 기기는 동기화·웹앱·폰 알림이 모두 막힘
+ *
  *  비밀값(Secrets): APP_KEY, VAPID_PUBLIC, VAPID_PRIVATE_JWK, TG_BOT_TOKEN, TG_BOT_USERNAME, TG_WEBHOOK_SECRET
  *  변수: NTFY_SERVER, VAPID_SUBJECT
  */
 import { sendWebPush } from "./webpush.js";
 import { ICON192, ICON512, BADGE } from "./icons.js";
-import { APP_HTML, SW_JS } from "./app_page.js";
+import { APP_HTML, SW_JS, ADMIN_HTML } from "./app_page.js";
+import { licenseApi, adminApi, deviceLicensed, LICENSED_SQL } from "./license.js";
 import { validToken, parseChanges, writeRecords, deriveAlarms, affectedSchedules, changesSince, deviceRev } from "./sync.js";
 
 const json = (obj, status = 200) =>
@@ -190,6 +194,9 @@ export default {
     // ── 폰 웹앱 (누구나 열 수 있음. 기기 ID가 곧 열쇠) ──
     if (p === "/") return json({ ok: true, service: "workdiary-push", webpush: !!env.VAPID_PUBLIC });
     if (p === "/app") return new Response(APP_HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
+    if (p === "/admin") return new Response(ADMIN_HTML, { headers: { "content-type": "text/html; charset=utf-8",
+      "x-robots-tag": "noindex", "cache-control": "no-store" } });
+    if (p.startsWith("/api/admin/")) return adminApi(p, req, env);
     if (p === "/sw.js") return new Response(SW_JS, { headers: { "content-type": "text/javascript; charset=utf-8" } });
     if (p === "/icon-192.png") return png(ICON192);
     if (p === "/icon-512.png") return png(ICON512);
@@ -231,6 +238,7 @@ export default {
     if (p === "/api/list") {
       const d = url.searchParams.get("d");
       if (!validDevice(d)) return json({ error: "bad" }, 400);
+      if (!(await deviceLicensed(env, d))) return json({ ok: true, now: nowSec(), items: [], phones: [], log: [], license: false });
       const { results } = await env.DB.prepare(
         `SELECT fire_at, title, message, sent FROM alarms WHERE device = ? AND fire_at > ? ORDER BY fire_at LIMIT 60`
       ).bind(d, nowSec() - 12 * 3600).all();
@@ -250,11 +258,13 @@ export default {
       if (!validDevice(d) || !validToken(k)) return json({ error: "bad" }, 400);
       const dv = await env.DB.prepare("SELECT token, rev FROM devices WHERE device = ?").bind(d).first();
       if (!dv || !dv.token || dv.token !== k) return json({ error: "auth" }, 403);
+      const lic = await deviceLicensed(env, d);
+      if (!lic) return json({ error: "license", message: "라이선스가 중지되었거나 만료됐어요." }, 403);
       if (isGet) {
         const since = Math.max(0, parseInt(url.searchParams.get("since") || "0", 10) || 0);
         const rev = await deviceRev(env, d);       // 먼저 번호를 정해두고 그때까지의 것만 (사이에 바뀐 건 다음에)
         const records = await changesSince(env, d, since, "", 100000, rev);
-        return json({ ok: true, rev, records });
+        return json({ ok: true, rev, records, lic: { name: lic.user_name || lic.name, tail: lic.key.slice(-4), capture: !!lic.capture, owner: !!lic.owner } });
       }
       const items = parseChanges(b?.ops);
       if (!items.length) return json({ error: "nothing" }, 400);
@@ -276,6 +286,12 @@ export default {
     if (req.method !== "POST") return json({ error: "method" }, 405);
     const body = await req.json().catch(() => null);
     if (!body) return json({ error: "bad json" }, 400);
+
+    if (p === "/api/lic/activate" || p === "/api/lic/check") return licenseApi(p, body, env, req);
+    // 아래 기능은 유효한 라이선스가 있는 기기만
+    if (["/api/sync2", "/api/sync", "/api/test"].includes(p) && validDevice(body.device) && !(await deviceLicensed(env, body.device))) {
+      return json({ error: "license", message: "라이선스가 없거나 중지·만료됐어요." }, 403);
+    }
 
     if (p === "/api/phones") {
       if (!validDevice(body.device)) return json({ error: "bad device" }, 400);
@@ -392,7 +408,7 @@ export default {
     const { results } = await env.DB.prepare(
       // 10분 이상 지난 건 버림 (서버 장애 후 몰아서 울리는 것 방지)
       `SELECT device, sid, topic, title, message FROM alarms
-       WHERE sent = 0 AND fire_at <= ? AND fire_at > ? LIMIT 200`
+       WHERE sent = 0 AND fire_at <= ?1 AND fire_at > ?2 AND ${LICENSED_SQL("alarms.device", "?1")} LIMIT 200`
     ).bind(now, now - 600).all();
 
     for (const r of results) {

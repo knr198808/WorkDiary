@@ -197,6 +197,12 @@
   .stamp { border:1px solid var(--line); background:var(--panel); border-radius:9px; padding:7px 11px; font-size:13px; font-weight:700; color:var(--text2); }
   .lbl-row { display:flex; align-items:center; justify-content:space-between; }
 
+  /* 라이선스 잠금 · 워터마크 · 복사 막기 */
+  #wm { position:fixed; inset:0; z-index:70; pointer-events:none; opacity:.09; background-repeat:repeat; }
+  body.nocopy .tab, body.nocopy .sheet-body .sitem, body.nocopy .ngrid, body.nocopy #memList { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  #licLock { text-align:center; padding:40px 22px; }
+  #licLock big { display:block; font-size:46px; margin-bottom:8px; }
+  body.locked nav#tabs, body.locked #fab, body.locked .tab, body.locked #btnSync { display:none !important; }
   #toast { position:fixed; left:50%; bottom:calc(var(--nav-h) + 90px + env(safe-area-inset-bottom)); transform:translateX(-50%);
            background:var(--dark); color:#F5EBD3; border:1px solid var(--gold); border-radius:12px; padding:11px 16px; font-size:14px;
            z-index:80; max-width:90vw; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s; }
@@ -229,6 +235,12 @@
   <div class="card hidden" id="noDevice">
     <h2>연결 정보가 없어요</h2>
     <p>PC의 업무 다이어리 → <b>📱 폰 연결 · 웹앱</b>에 있는 <b>QR코드</b>를 폰 카메라로 찍어서 열어주세요.</p>
+  </div>
+  <div class="card hidden" id="licLock">
+    <big>🔒</big>
+    <h2 style="margin:0 0 8px">사용할 수 없어요</h2>
+    <p id="licLockMsg">라이선스가 중지되었거나 기간이 끝났어요.</p>
+    <p class="muted">판매자에게 문의해 주세요. 다시 사용할 수 있게 되면 이 화면이 자동으로 풀려요.</p>
   </div>
   <div class="card hidden" id="needKey">
     <h2>🔑 PC와 데이터 연결이 필요해요</h2>
@@ -414,10 +426,14 @@
     loading = true; $("btnSync").classList.add("spin");
     return fetch("/api/data?d=" + encodeURIComponent(dev) + "&k=" + encodeURIComponent(key) + "&since=" + (force ? 0 : rev), { cache: "no-store" })
       .then(function (r) {
-        if (r.status === 403 || r.status === 400) { throw { auth: true }; }
+        if (r.status === 403 || r.status === 400) {
+          return r.json().catch(function () { return {}; }).then(function (j) { throw j.error === "license" ? { lic: j.message } : { auth: true }; });
+        }
         if (!r.ok) throw new Error("서버 " + r.status);
         return r.json();
       }).then(function (j) {
+        licLock(null);
+        setWatermark(j.lic);
         if (force) R = { schedule: {}, member: {}, note: {}, diary: {} };
         merge(j.records || []);
         var changed = force || (j.records || []).length > 0;
@@ -425,7 +441,8 @@
         saveCache();
         if (changed) renderAll();
       }).catch(function (e) {
-        if (e && e.auth) { linked = false; key = ""; try { localStorage.removeItem("wd_key_" + dev); localStorage.removeItem(CK); } catch (x) {}
+        if (e && e.lic !== undefined) { licLock(e.lic || "라이선스가 중지되었거나 기간이 끝났어요."); }
+        else if (e && e.auth) { linked = false; key = ""; try { localStorage.removeItem("wd_key_" + dev); localStorage.removeItem(CK); } catch (x) {}
           R = { schedule: {}, member: {}, note: {}, diary: {} }; applyLinkState(); }
         else syncErr = "⚠ 오프라인 · 다시 시도 중";
       }).then(function () { loading = false; $("btnSync").classList.remove("spin"); setSync(); renderLinkInfo(); });
@@ -433,7 +450,10 @@
   function saveOps(ops) {
     return fetch("/api/data", { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ d: dev, k: key, ops: ops }) }).then(function (r) {
-        if (r.status === 403) throw new Error("PC 연결 열쇠가 바뀌었어요. QR을 다시 찍어주세요.");
+        if (r.status === 403) return r.json().catch(function () { return {}; }).then(function (j) {
+          if (j.error === "license") { licLock(j.message); throw new Error("사용할 수 없는 라이선스예요"); }
+          throw new Error("PC 연결 열쇠가 바뀌었어요. QR을 다시 찍어주세요.");
+        });
         if (!r.ok) throw new Error("저장 실패 (" + r.status + ")");
         return r.json();
       }).then(function (j) {
@@ -449,6 +469,39 @@
         return j;
       });
   }
+
+  // 라이선스가 정지·만료되면: 화면 잠금 + 이 폰에 남은 데이터 지우기
+  var locked = false;
+  function licLock(msg) {
+    if (!msg) { if (locked) { locked = false; document.body.classList.remove("locked"); show("licLock", false); setTab(tab); } return; }
+    locked = true;
+    R = { schedule: {}, member: {}, note: {}, diary: {} }; rev = 0;
+    try { localStorage.removeItem(CK); } catch (x) {}
+    if (sheetOpen) { closingOK = true; history.back(); }
+    $("licLockMsg").textContent = msg;
+    document.body.classList.add("locked"); show("licLock", true); show("needKey", false);
+    setWatermark(null);
+  }
+  // 화면에 사용자 이름을 옅게 깔아둠 (캡처가 돌아다니면 누구 것인지 알 수 있게)
+  function setWatermark(lic) {
+    var el = $("wm");
+    if (!lic || lic.owner) { if (el) el.remove(); document.body.classList.remove("nocopy"); return; }
+    document.body.classList.add("nocopy");
+    var t = (lic.name || "") + " · " + (lic.tail || "");
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="260" height="170"><text x="10" y="110" transform="rotate(-24 130 85)" ' +
+      'font-family="sans-serif" font-size="17" font-weight="700" fill="#2B2620">' + esc(t) + "</text></svg>";
+    if (!el) { el = document.createElement("div"); el.id = "wm"; document.body.appendChild(el); }
+    el.style.backgroundImage = 'url("data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) + '")';
+  }
+  // 입력칸 밖의 글자 복사 막기
+  document.addEventListener("copy", function (e) {
+    if (!document.body.classList.contains("nocopy")) return;
+    var t = e.target && e.target.closest ? e.target : null;
+    if (!(t && t.closest("input, textarea"))) e.preventDefault();
+  });
+  document.addEventListener("contextmenu", function (e) {
+    if (document.body.classList.contains("nocopy") && !(e.target.closest && e.target.closest("input, textarea"))) e.preventDefault();
+  });
 
   // ───────────── 탭 ─────────────
   var tab = "sched";

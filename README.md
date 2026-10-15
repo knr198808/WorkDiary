@@ -9,9 +9,17 @@
 | 1 | `1_서버배포.bat` | 처음 한 번 | 클라우드플레어 로그인 → 알림 서버 자동 생성·배포 → `서버정보.txt` 저장 |
 | 2 | `2_깃허브_업로드.bat` | 처음 한 번 | GitHub 로그인 → 저장소 생성·업로드 → 서버정보 등록 → v1.0.0 exe 자동 빌드 |
 | 3 | `3_새버전_배포.bat` | 수정할 때마다 | 버전 올려서 업로드 → exe 자동 빌드 → 사용자들 자동 업데이트 |
+| 4 | `4_라이선스_관리.bat` | 필요할 때 | 라이선스 관리 페이지 열기 (비밀번호 자동 복사) → 키 발급·연장·정지·PC 초기화·캡처 허용 |
 
 - 1번은 Node.js(https://nodejs.org), 2번은 Git·GitHub CLI가 필요합니다. 없으면 2번이 자동 설치한 뒤 다시 실행하라고 안내합니다.
 - `서버정보.txt`(서버 비밀키)는 GitHub에 올라가지 않습니다.
+
+## 라이선스
+- 키 1개 = PC 1대. 사용자가 처음 입력한 PC에 묶이고, 다른 PC에서는 막혀요.
+- 관리 페이지(`서버주소/admin`, 폰에서도 열림)에서 키 발급·기간·정지·PC 초기화·캡처 허용을 관리해요.
+- 정지·만료되면: PC 프로그램은 10분 안에 잠기고, 웹앱·폰 알림·텔레그램 알림이 바로 끊겨요. (인터넷이 끊긴 PC는 마지막 확인 후 3일까지 사용 가능)
+- 캡처 막기: 캡처 허용이 꺼진 키는 PC 프로그램 창이 캡처·녹화·원격화면(애니데스크 등)에서 보이지 않아요. 폰 웹앱은 캡처를 막을 수 없어서 사용자 이름이 옅게 깔리고 글자 복사가 막혀요.
+- 내 PC(서버정보.txt 가 있는 PC)는 키를 넣지 않아도 '관리자 (나)' 키가 자동으로 발급돼요.
 
 ## 사용하는 사람
 1. Releases에서 `WorkDiary.exe`를 받아 실행합니다. 새 버전이 나오면 자동으로 물어보고 업데이트돼요.
@@ -22,6 +30,6 @@
 
 ## 폴더 구성
 - `WorkDiary.pyw` 프로그램 본체 / `실행.bat` 파이썬으로 바로 실행 / `build.bat` 내 PC에서 exe 만들기
-- `cloudflare/` 알림·동기화 서버 (worker.js, sync.js, webpush.js, schema.sql, wrangler.toml) · 폰 페이지는 `cloudflare/page/` 수정 후 `python build_page.py`
+- `cloudflare/` 알림·동기화·라이선스 서버 (worker.js, sync.js, license.js, webpush.js, schema.sql, wrangler.toml) · 폰 페이지는 `cloudflare/page/` 수정 후 `python build_page.py`
 - `tools/` 위 1~3번 bat가 실행하는 스크립트
 - `.github/workflows/release.yml` 태그를 올리면 exe를 빌드해 Releases에 올리는 설정 (2번 실행 시 자동 배치)

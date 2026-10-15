@@ -18,6 +18,12 @@ if ($ver -notmatch "^v") { $ver = "v$ver" }
 $msg = Read-Host "변경 내용 한 줄 (사용자 업데이트 창에 표시)"
 if (-not $msg) { $msg = "$ver 업데이트" }
 
+# 내 PC에서 실행.bat 으로 켤 때도 새 버전 번호가 보이도록 원본 파일의 버전도 올림
+$py = Join-Path $root "WorkDiary.pyw"
+$t = [IO.File]::ReadAllText($py)
+$t = [regex]::Replace($t, '(?m)^APP_VERSION = ".*?"', "APP_VERSION = `"$($ver.TrimStart('v'))`"")
+[IO.File]::WriteAllText($py, $t, (New-Object Text.UTF8Encoding $false))
+
 # 빌드 설정(release.yml) 최신본을 .github/workflows 로 반영
 $wf = Join-Path $root ".github\workflows"
 New-Item -ItemType Directory -Force $wf | Out-Null

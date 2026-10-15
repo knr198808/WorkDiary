@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#1F1B16">
+<title>라이선스 관리 · 업무 다이어리</title>
+<link rel="icon" href="/icon-192.png">
+<style>
+  :root { --bg:#F6F1E6; --panel:#FFFDF8; --dark:#1F1B16; --dark2:#2A241D; --gold:#B08326; --gold-dk:#8F6A1C; --gold-br:#D9B45A;
+          --gold-lt:#F4E7C5; --line:#E3D6B8; --text:#2B2620; --text2:#4A4033; --muted:#8A7F6B; --ok:#4F7A3A; --warn:#B8892B;
+          --bad:#B4443A; --gray:#9C9384; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--bg); color:var(--text); font-size:15px;
+         font-family:-apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; }
+  button, input, select, textarea { font:inherit; color:inherit; }
+  button { cursor:pointer; }
+  .hidden { display:none !important; }
+  header { position:sticky; top:0; z-index:10; background:var(--dark); color:var(--gold-br); border-bottom:2px solid var(--gold);
+           padding:calc(12px + env(safe-area-inset-top)) 16px 12px; display:flex; align-items:center; gap:10px; }
+  header b { font-size:18px; }
+  header small { color:#9C8B66; font-size:12px; margin-left:4px; }
+  header .r { margin-left:auto; display:flex; gap:8px; }
+  header b, header button { white-space:nowrap; }
+  @media (max-width:480px) { header small { display:none; } header button { padding:7px 9px; } }
+  header button { background:var(--dark2); border:1px solid #4A3F2E; color:var(--gold-br); border-radius:10px; padding:7px 12px; font-size:13.5px; }
+  main { max-width:980px; margin:0 auto; padding:16px 14px 80px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:12px; }
+  .login { max-width:380px; margin:60px auto; }
+  .login h2 { margin:0 0 6px; color:var(--gold-dk); }
+  .inp { width:100%; border:1px solid var(--line); background:#fff; border-radius:10px; padding:11px 12px; font-size:15.5px; outline:none; }
+  .inp:focus { border-color:var(--gold); box-shadow:0 0 0 3px #B0832622; }
+  .btn { border:0; border-radius:10px; padding:11px 16px; font-weight:700; background:#EFE5CF; color:var(--text2); }
+  .btn:active { filter:brightness(.95); }
+  .btn.primary { background:var(--gold); color:#fff; }
+  .btn.danger { background:#FBEDEA; color:var(--bad); }
+  .btn.ok { background:#E7F0E1; color:var(--ok); }
+  .btn.block { display:block; width:100%; margin-top:10px; padding:13px; }
+  .err { color:var(--bad); font-size:14px; margin-top:8px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:8px; margin-bottom:12px; }
+  .stat { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 12px; cursor:pointer; }
+  .stat b { display:block; font-size:22px; }
+  .stat span { font-size:12.5px; color:var(--muted); font-weight:600; }
+  .stat.on { border-color:var(--gold); box-shadow:0 0 0 2px var(--gold) inset; }
+  .tools { display:flex; gap:8px; margin-bottom:12px; }
+  .tools .inp { flex:1; }
+  .lic { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:13px 14px; margin-bottom:8px; cursor:pointer;
+         display:grid; grid-template-columns:1fr auto; gap:4px 12px; }
+  .lic:hover { border-color:#D6C49A; }
+  .lic .nm { font-weight:800; font-size:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .lic .key { font-family:ui-monospace, Consolas, monospace; font-size:13.5px; color:var(--text2); letter-spacing:.3px; }
+  .lic .meta { grid-column:1 / -1; color:var(--muted); font-size:13px; display:flex; gap:14px; flex-wrap:wrap; }
+  .lic .right { text-align:right; }
+  .lic .dday { font-weight:800; font-size:15px; }
+  .badge { font-size:12px; font-weight:700; border-radius:6px; padding:2px 8px; }
+  .s-ok { background:#E7F0E1; color:var(--ok); } .s-wait { background:#EEF1F6; color:#3E5C8A; }
+  .s-soon { background:#FBF0D6; color:var(--warn); } .s-expired { background:#FBEDEA; color:var(--bad); }
+  .s-revoked { background:#ECE9E3; color:var(--gray); } .s-owner { background:var(--dark); color:var(--gold-br); }
+  .cap { background:#F1E9FB; color:#7B3FA0; }
+  .lic.revoked { opacity:.65; }
+  .sheet-bg { position:fixed; inset:0; background:rgba(20,16,10,.45); z-index:40; display:flex; align-items:flex-end; justify-content:center; }
+  .sheet { background:var(--bg); width:100%; max-width:560px; max-height:92vh; overflow-y:auto; border-radius:18px 18px 0 0;
+           padding:18px 18px calc(24px + env(safe-area-inset-bottom)); animation:up .18s ease-out; }
+  @media (min-width:700px) { .sheet-bg { align-items:center; } .sheet { border-radius:18px; } }
+  @keyframes up { from { transform:translateY(30px); opacity:0; } to { transform:none; opacity:1; } }
+  .sheet h3 { margin:0 0 4px; font-size:18px; display:flex; align-items:center; gap:8px; }
+  .sheet h3 .x { margin-left:auto; border:0; background:none; font-size:22px; color:var(--muted); }
+  .fl { display:block; font-size:13px; font-weight:700; color:var(--gold-dk); margin:14px 2px 6px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  .row > .btn { flex:1; min-width:90px; }
+  .bigkey { font-family:ui-monospace, Consolas, monospace; font-size:22px; font-weight:800; letter-spacing:1px; text-align:center;
+            background:#fff; border:2px dashed var(--gold); border-radius:12px; padding:16px; margin:12px 0; user-select:all; }
+  .kv { display:grid; grid-template-columns:96px 1fr; gap:6px 10px; font-size:14px; margin-top:10px; }
+  .kv span:nth-child(odd) { color:var(--muted); }
+  .toggle { display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-top:12px; font-weight:700; }
+  .toggle input { width:22px; height:22px; accent-color:var(--gold); }
+  .toggle small { display:block; font-weight:400; color:var(--muted); font-size:12.5px; }
+  #toast { position:fixed; left:50%; bottom:30px; transform:translateX(-50%); background:var(--dark); color:#F5EBD3; border:1px solid var(--gold);
+           border-radius:12px; padding:11px 16px; font-size:14px; z-index:80; opacity:0; pointer-events:none; transition:opacity .2s; max-width:90vw; text-align:center; }
+  #toast.on { opacity:1; }
+  .empty { text-align:center; color:var(--muted); padding:40px 10px; }
+</style>
+</head>
+<body>
+<header>
+  <b>◆ 라이선스 관리</b><small>업무 다이어리</small>
+  <div class="r hidden" id="hdrBtns"><button id="btnReload">⟳</button><button id="btnLogout">로그아웃</button></div>
+</header>
+<main>
+  <div class="card login hidden" id="loginCard">
+    <h2>관리자 로그인</h2>
+    <p class="muted">서버정보.txt 의 ADMIN_PASS 값을 넣으세요. (4_라이선스_관리.bat 으로 열면 자동 복사돼요)</p>
+    <input class="inp" id="pw" type="password" placeholder="관리 비밀번호" autocomplete="current-password">
+    <label class="muted" style="display:flex;gap:6px;align-items:center;margin-top:10px"><input type="checkbox" id="keep" checked> 이 기기에서 로그인 유지</label>
+    <button class="btn primary block" id="btnLogin">로그인</button>
+    <div class="err hidden" id="loginErr"></div>
+  </div>
+
+  <div class="hidden" id="app">
+    <div class="stats" id="stats"></div>
+    <div class="tools">
+      <input class="inp" id="q" placeholder="🔍 이름 · 키 · PC · 메모 검색" autocomplete="off">
+      <button class="btn primary" id="btnNew">＋ 새 키 발급</button>
+    </div>
+    <div id="list"></div>
+    <p class="muted" style="margin-top:14px;line-height:1.6">
+      · 키 1개 = PC 1대. 사용자가 처음 입력한 PC에 자동으로 묶여요.<br>
+      · <b>정지</b>하면 그 PC 프로그램은 10분 안에 잠기고, 웹앱·폰 알림도 바로 끊겨요.<br>
+      · 사용자가 PC를 바꿨다면 <b>PC 초기화</b> 후 새 PC에서 같은 키를 넣으면 돼요.<br>
+      · <b>캡처 허용</b>을 끄면 PC 프로그램 화면이 캡처·녹화·원격(애니데스크 등)에서 검게 보여요.
+    </p>
+  </div>
+</main>
+<div id="sheetWrap"></div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var pw = "";
+  try { pw = localStorage.getItem("wd_admin") || sessionStorage.getItem("wd_admin") || ""; } catch (e) {}
+  var items = [], now = 0, filter = "all";
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  var toastT;
+  function toast(t) { var el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(function () { el.classList.remove("on"); }, 2200); }
+  function api(path, body) {
+    return fetch(path, { method: body ? "POST" : "GET", headers: Object.assign({ "X-Admin": pw }, body ? { "content-type": "application/json" } : {}),
+      body: body ? JSON.stringify(body) : undefined, cache: "no-store" }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (r.status === 401) { logout(); throw new Error(j.error || "비밀번호가 틀렸어요"); }
+          if (!r.ok) throw new Error(j.error || ("오류 " + r.status));
+          return j;
+        });
+      });
+  }
+  // 날짜 (한국 시간)
+  function kdate(sec) { return new Date(sec * 1000 + 9 * 3600000).toISOString().slice(0, 10); }
+  function todayK() { return kdate(Math.floor(Date.now() / 1000)); }
+  function addDays(ds, n) { var d = new Date(ds + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function dleft(exp) { return Math.ceil((exp - now) / 86400); }
+  function ago(sec) {
+    if (!sec) return "-"; var s = now - sec;
+    if (s < 120) return "방금"; if (s < 3600) return Math.floor(s / 60) + "분 전"; if (s < 86400) return Math.floor(s / 3600) + "시간 전";
+    if (s < 86400 * 30) return Math.floor(s / 86400) + "일 전"; return kdate(sec);
+  }
+  function status(it) {
+    if (it.revoked) return ["revoked", "정지"];
+    if (it.expires && it.expires < now) return ["expired", "만료"];
+    if (!it.device) return ["wait", "미등록"];
+    if (it.expires && dleft(it.expires) <= 7) return ["soon", "곧 만료"];
+    return ["ok", "사용중"];
+  }
+
+  // ── 로그인 ──
+  function showLogin(msg) {
+    $("loginCard").classList.remove("hidden"); $("app").classList.add("hidden"); $("hdrBtns").classList.add("hidden");
+    $("loginErr").textContent = msg || ""; $("loginErr").classList.toggle("hidden", !msg);
+    setTimeout(function () { $("pw").focus(); }, 50);
+  }
+  function logout() { pw = ""; try { localStorage.removeItem("wd_admin"); sessionStorage.removeItem("wd_admin"); } catch (e) {} showLogin(); }
+  $("btnLogin").onclick = function () {
+    pw = $("pw").value.trim(); if (!pw) return;
+    load().then(function () {
+      try { (($("keep").checked) ? localStorage : sessionStorage).setItem("wd_admin", pw); } catch (e) {}
+    }).catch(function (e) { showLogin(e.message); });
+  };
+  $("pw").onkeydown = function (e) { if (e.key === "Enter") $("btnLogin").click(); };
+  $("btnLogout").onclick = logout;
+  $("btnReload").onclick = function () { load().then(function () { toast("새로고침했어요"); }); };
+
+  function load() {
+    return api("/api/admin/list").then(function (j) {
+      items = j.items || []; now = j.now;
+      $("loginCard").classList.add("hidden"); $("app").classList.remove("hidden"); $("hdrBtns").classList.remove("hidden");
+      render();
+    });
+  }
+
+  // ── 목록 ──
+  $("q").oninput = render;
+  function render() {
+    var cnt = { all: items.length, ok: 0, wait: 0, soon: 0, expired: 0, revoked: 0 };
+    items.forEach(function (it) { cnt[status(it)[0]]++; });
+    $("stats").innerHTML = [["all", "전체"], ["ok", "사용중"], ["wait", "미등록"], ["soon", "곧 만료 (7일)"], ["expired", "만료"], ["revoked", "정지"]]
+      .map(function (s) { return '<div class="stat' + (filter === s[0] ? " on" : "") + '" data-f="' + s[0] + '"><b>' + cnt[s[0]] + "</b><span>" + s[1] + "</span></div>"; }).join("");
+    Array.prototype.forEach.call($("stats").children, function (el) { el.onclick = function () { filter = filter === el.dataset.f ? "all" : el.dataset.f; render(); }; });
+    var q = $("q").value.trim().toLowerCase();
+    var list = items.filter(function (it) {
+      if (filter !== "all" && status(it)[0] !== filter) return false;
+      return !q || [it.name, it.user_name, it.key, it.pc_name, it.memo].join(" ").toLowerCase().indexOf(q) >= 0;
+    });
+    if (!list.length) { $("list").innerHTML = '<div class="empty">' + (items.length ? "조건에 맞는 키가 없어요" : "아직 발급한 키가 없어요.<br>[＋ 새 키 발급]으로 만들어 보세요.") + "</div>"; return; }
+    $("list").innerHTML = list.map(function (it) {
+      var st = status(it), dd = it.expires ? (it.expires < now ? "만료됨" : "D-" + dleft(it.expires)) : "무제한";
+      return '<div class="lic' + (it.revoked ? " revoked" : "") + '" data-k="' + it.key + '">' +
+        '<div><div class="nm">' + esc(it.name || it.user_name || "(이름 없음)") +
+        (it.user_name && it.user_name !== it.name ? ' <span class="muted" style="font-weight:600">(입력: ' + esc(it.user_name) + ")</span>" : "") + ' <span class="badge s-' + st[0] + '">' + st[1] + "</span>" +
+        (it.owner ? ' <span class="badge s-owner">관리자</span>' : "") + (it.capture ? ' <span class="badge cap">캡처 허용</span>' : "") + "</div>" +
+        '<div class="key">' + it.key + "</div></div>" +
+        '<div class="right"><div class="dday" style="color:' + (st[0] === "expired" ? "var(--bad)" : st[0] === "soon" ? "var(--warn)" : "var(--text)") + '">' + dd + "</div>" +
+        '<div class="muted">' + (it.expires ? "~" + kdate(it.expires) : "") + "</div></div>" +
+        '<div class="meta"><span>💻 ' + esc(it.pc_name || "PC 미등록") + "</span><span>🕒 " + ago(it.last_seen) + "</span>" +
+        (it.version ? "<span>v" + esc(it.version) + "</span>" : "") +
+        (it.device ? "<span>👥 회원 " + (it.members || 0) + "</span><span>📱 웹앱 " + (it.phones || 0) + " · 텔레그램 " + (it.tg || 0) + "</span>" : "") +
+        (it.memo ? "<span>📝 " + esc(it.memo) + "</span>" : "") + "</div></div>";
+    }).join("");
+    Array.prototype.forEach.call($("list").querySelectorAll(".lic"), function (el) { el.onclick = function () { openDetail(el.dataset.k); }; });
+  }
+
+  // ── 시트 ──
+  function sheet(html) {
+    $("sheetWrap").innerHTML = '<div class="sheet-bg" id="sbg"><div class="sheet">' + html + "</div></div>";
+    $("sbg").onclick = function (e) { if (e.target.id === "sbg") closeSheet(); };
+    Array.prototype.forEach.call(document.querySelectorAll(".sheet .x"), function (b) { b.onclick = closeSheet; });
+  }
+  function closeSheet() { $("sheetWrap").innerHTML = ""; }
+  function copy(t, msg) {
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast(msg || "복사했어요"); })
+      .catch(function () { window.prompt("복사하세요", t); });
+  }
+  function shareText(key) {
+    return "[업무 다이어리] 라이선스 키\n" + key + "\n\n프로그램을 처음 켤 때 이 키를 입력하세요. (PC 1대에서만 사용할 수 있어요)";
+  }
+
+  // 새 키 발급
+  $("btnNew").onclick = function () {
+    sheet('<h3>＋ 새 키 발급 <button class="x">×</button></h3>' +
+      '<label class="fl">사용자 이름</label><input class="inp" id="nName" placeholder="예: 홍길동 팀장">' +
+      '<label class="fl">메모 (선택)</label><input class="inp" id="nMemo" placeholder="예: 강남지점, 010-0000-0000">' +
+      '<label class="fl">사용 기간</label><select class="inp" id="nPeriod"><option value="0">무제한</option><option value="30">30일</option>' +
+      '<option value="90">90일</option><option value="180">180일</option><option value="365">1년</option><option value="date">날짜 직접 지정</option></select>' +
+      '<input class="inp hidden" type="date" id="nDate" style="margin-top:8px">' +
+      '<label class="toggle"><input type="checkbox" id="nCap"><div>화면 캡처 허용<small>끄면(기본) 캡처·녹화·원격화면에서 검게 보여요</small></div></label>' +
+      '<button class="btn primary block" id="nGo">발급</button><div class="err hidden" id="nErr"></div>');
+    $("nPeriod").onchange = function () { $("nDate").classList.toggle("hidden", this.value !== "date"); if (this.value === "date") $("nDate").value = addDays(todayK(), 30); };
+    setTimeout(function () { $("nName").focus(); }, 50);
+    $("nGo").onclick = function () {
+      var name = $("nName").value.trim();
+      if (!name) { $("nErr").textContent = "사용자 이름을 넣어주세요"; $("nErr").classList.remove("hidden"); return; }
+      var per = $("nPeriod").value, body = { name: name, memo: $("nMemo").value.trim(), capture: $("nCap").checked };
+      if (per === "0") body.unlimited = true; else if (per === "date") body.expires_date = $("nDate").value; else body.days = +per;
+      this.disabled = true;
+      api("/api/admin/create", body).then(function (j) {
+        load();
+        sheet('<h3>✅ 발급 완료 <button class="x">×</button></h3><p class="muted">' + esc(name) + "님에게 아래 키를 보내주세요.</p>" +
+          '<div class="bigkey">' + j.key + "</div>" +
+          '<div class="row"><button class="btn primary" id="cKey">키만 복사</button><button class="btn" id="cMsg">안내 문구까지 복사</button></div>');
+        $("cKey").onclick = function () { copy(j.key, "키를 복사했어요"); };
+        $("cMsg").onclick = function () { copy(shareText(j.key), "안내 문구를 복사했어요"); };
+        copy(j.key, "키를 복사했어요");
+      }).catch(function (e) { $("nErr").textContent = e.message; $("nErr").classList.remove("hidden"); $("nGo").disabled = false; });
+    };
+  };
+
+  // 키 상세 / 관리
+  function openDetail(key) {
+    var it = items.filter(function (x) { return x.key === key; })[0]; if (!it) return;
+    var st = status(it);
+    var expTxt = it.expires ? kdate(it.expires) + (it.expires < now ? " (만료됨)" : " (D-" + dleft(it.expires) + ")") : "무제한";
+    sheet('<h3>' + esc(it.name || "(이름 없음)") + ' <span class="badge s-' + st[0] + '">' + st[1] + '</span><button class="x">×</button></h3>' +
+      '<div class="bigkey" style="font-size:18px;padding:12px">' + it.key + "</div>" +
+      '<div class="row"><button class="btn" id="dCopy">키 복사</button><button class="btn" id="dMsg">안내 문구 복사</button></div>' +
+      '<div class="kv"><span>만료</span><b>' + expTxt + "</b><span>사용자 입력 이름</span><span>" + esc(it.user_name || "-") + "</span><span>PC</span><span>" + esc(it.pc_name || "아직 등록 안 됨") + (it.hwid ? " · " + esc(it.hwid) : "") +
+      "</span><span>등록일</span><span>" + (it.bound_at ? kdate(it.bound_at) : "-") + "</span><span>마지막 접속</span><span>" + ago(it.last_seen) +
+      (it.last_ip ? " · " + esc(it.last_ip) : "") + "</span><span>버전</span><span>" + esc(it.version || "-") + "</span><span>발급일</span><span>" + (it.created ? kdate(it.created) : "-") + "</span></div>" +
+      '<label class="fl">기간 연장</label><div class="row"><button class="btn" data-x="30">+30일</button><button class="btn" data-x="90">+90일</button>' +
+      '<button class="btn" data-x="365">+1년</button><button class="btn" data-x="0">무제한</button></div>' +
+      '<div class="row" style="margin-top:8px"><input class="inp" type="date" id="dDate" style="flex:2" value="' + (it.expires ? kdate(it.expires) : addDays(todayK(), 30)) + '"><button class="btn" id="dSetDate" style="flex:1">날짜로 지정</button></div>' +
+      '<label class="fl">이름 · 메모</label><input class="inp" id="dName" value="' + esc(it.name) + '"><input class="inp" id="dMemo" style="margin-top:6px" placeholder="메모" value="' + esc(it.memo) + '">' +
+      '<button class="btn block" id="dSaveInfo">이름·메모 저장</button>' +
+      '<label class="toggle"><input type="checkbox" id="dCap"' + (it.capture ? " checked" : "") + '><div>화면 캡처 허용<small>원격 지원(애니데스크)할 때만 잠깐 켜세요. 10분 안에 반영돼요.</small></div></label>' +
+      '<label class="fl">관리</label><div class="row">' +
+      (it.revoked ? '<button class="btn ok" id="dRevoke">▶ 정지 해제</button>' : '<button class="btn danger" id="dRevoke">⛔ 사용 정지</button>') +
+      '<button class="btn" id="dUnbind"' + (it.hwid ? "" : " disabled") + '>💻 PC 초기화</button></div>' +
+      '<button class="btn danger block" id="dDel">🗑 키 삭제</button>');
+    $("dCopy").onclick = function () { copy(it.key, "키를 복사했어요"); };
+    $("dMsg").onclick = function () { copy(shareText(it.key), "안내 문구를 복사했어요"); };
+    function upd(body, msg) { body.key = it.key; return api("/api/admin/update", body).then(function () { toast(msg); return load(); }).then(function () { openDetail(key); }).catch(function (e) { toast("⚠ " + e.message); }); }
+    Array.prototype.forEach.call(document.querySelectorAll("[data-x]"), function (b) {
+      b.onclick = function () {
+        var n = +b.dataset.x;
+        if (!n) return upd({ unlimited: true }, "무제한으로 바꿨어요");
+        var base = it.expires && it.expires > now ? kdate(it.expires) : todayK();
+        var d = addDays(base, n);
+        upd({ expires_date: d }, d + " 까지로 연장했어요");
+      };
+    });
+    $("dSetDate").onclick = function () { var d = $("dDate").value; if (d) upd({ expires_date: d }, d + " 까지로 지정했어요"); };
+    $("dSaveInfo").onclick = function () { upd({ name: $("dName").value.trim(), memo: $("dMemo").value.trim() }, "저장했어요"); };
+    $("dCap").onchange = function () { upd({ capture: this.checked }, this.checked ? "캡처를 허용했어요" : "캡처를 막았어요"); };
+    $("dRevoke").onclick = function () {
+      if (!it.revoked && !confirm((it.name || "이 키") + " 사용을 정지할까요?\nPC 프로그램이 잠기고 웹앱·폰 알림이 끊겨요.")) return;
+      upd({ revoked: !it.revoked }, it.revoked ? "정지를 풀었어요" : "정지했어요");
+    };
+    $("dUnbind").onclick = function () {
+      if (!confirm("PC 등록을 초기화할까요?\n지금 PC에서는 다음 확인 때 잠기고, 새 PC에서 같은 키를 넣을 수 있어요.")) return;
+      api("/api/admin/unbind", { key: it.key }).then(function () { toast("PC 등록을 초기화했어요"); return load(); }).then(function () { openDetail(key); });
+    };
+    $("dDel").onclick = function () {
+      if (!confirm("이 키를 완전히 삭제할까요? 되돌릴 수 없어요.\n(잠깐 막기만 하려면 '사용 정지'를 쓰세요)")) return;
+      api("/api/admin/delete", { key: it.key }).then(function () { toast("삭제했어요"); closeSheet(); load(); });
+    };
+  }
+
+  if (pw) load().catch(function (e) { showLogin(e.message); }); else showLogin();
+})();
+</script>
+</body>
+</html>

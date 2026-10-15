@@ -59,6 +59,12 @@ $key = $info["WORKER_KEY"]
 if (-not $key) { $key = -join ((1..40) | ForEach-Object { "abcdefghijkmnpqrstuvwxyz23456789"[(Get-Random -Maximum 32)] }) }
 $key | npx wrangler secret put APP_KEY
 if ($LASTEXITCODE -ne 0) { Fail "비밀키 설정 실패" }
+# 라이선스 관리 페이지 비밀번호 (처음 한 번 만들고 계속 같은 값 사용)
+$adminPass = $info["ADMIN_PASS"]
+if (-not $adminPass) { $adminPass = -join ((1..20) | ForEach-Object { "abcdefghijkmnpqrstuvwxyz23456789"[(Get-Random -Maximum 32)] }) }
+$adminPass | npx wrangler secret put ADMIN_PASS
+if ($LASTEXITCODE -ne 0) { Fail "관리 비밀번호 설정 실패" }
+$info["ADMIN_PASS"] = $adminPass
 
 Step "[5/7] 폰 알림(웹앱 푸시) 키 설정"
 if (-not $info["VAPID_PUBLIC"] -or -not $info["VAPID_PRIVATE_JWK"]) {
@@ -112,6 +118,7 @@ try {
 } catch { Write-Host "응답 확인 실패 (몇 분 뒤 정상화될 수 있음): $_" -ForegroundColor Yellow }
 
 Write-Host "`n완료! 서버 주소: $url"
+Write-Host "라이선스 관리 페이지: $url/admin   (비밀번호: $adminPass  → 4_라이선스_관리.bat 으로 열면 자동 복사)" -ForegroundColor Yellow
 Write-Host "서버정보.txt 에 저장했습니다." -ForegroundColor Green
 if (-not (Test-Path (Join-Path $root ".git"))) { Write-Host "이제 2_깃허브_업로드.bat 을 실행하세요." -ForegroundColor Green }
 Read-Host "Enter를 누르면 닫힙니다"

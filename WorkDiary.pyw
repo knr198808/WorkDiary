@@ -24,7 +24,7 @@ except Exception:
     pass
 
 # ═════════════════════ 배포 설정 (배포자가 채우는 곳) ═════════════════════
-APP_VERSION = "1.0.0"          # GitHub Actions가 태그(v1.0.1 등)로 자동 교체
+APP_VERSION = "1.0.2"          # GitHub Actions가 태그(v1.0.1 등)로 자동 교체
 GITHUB_REPO = ""               # 예: "내아이디/WorkDiary"  → 자동 업데이트에 사용
 WORKER_URL = ""                # 예: "https://workdiary-push.내계정.workers.dev" → PC 꺼져도 폰 알림
 WORKER_KEY = ""                # 클라우드플레어 Worker에 설정한 APP_KEY 와 동일하게
@@ -41,6 +41,7 @@ _OLD_DB = os.path.join(BASE_DIR, "workdiary.db")
 if not os.path.exists(DB_PATH) and os.path.exists(_OLD_DB):   # 예전 버전 데이터 옮겨오기
     import shutil
     shutil.copy2(_OLD_DB, DB_PATH)
+ADMIN_PASS = ""      # 관리자 본인 PC에만 있음 (서버정보.txt) → 라이선스 키 자동 발급
 if not WORKER_URL:   # 내 PC에서 실행.bat 으로 켤 때: 서버정보.txt 의 서버 주소 사용 (배포 exe는 빌드 때 들어감)
     try:
         with open(os.path.join(BASE_DIR, "서버정보.txt"), encoding="utf-8-sig") as _f:
@@ -50,6 +51,8 @@ if not WORKER_URL:   # 내 PC에서 실행.bat 으로 켤 때: 서버정보.txt 
                     WORKER_URL = _v
                 elif _k == "WORKER_KEY" and _v:
                     WORKER_KEY = _v
+                elif _k == "ADMIN_PASS" and _v:
+                    ADMIN_PASS = _v
     except OSError:
         pass
 
@@ -122,10 +125,33 @@ def btn(parent, text, cmd, primary=False, dark=False, **kw):
         bg, fg, abg, afg = SEC, TEXT2, SEC_DK, TEXT
     b = tk.Button(parent, text=text, command=cmd, font=FONT_B if primary else FONT, relief="flat", bd=0,
                   cursor="hand2", bg=bg, fg=fg, activebackground=abg, activeforeground=afg,
-                  padx=12, pady=4, highlightthickness=0, **kw)
+                  padx=kw.pop("padx", 12), pady=4, highlightthickness=0, **kw)
     b.bind("<Enter>", lambda e: b.config(bg=abg))
     b.bind("<Leave>", lambda e: b.config(bg=bg))
     return b
+
+
+def tooltip(w, text):
+    """마우스를 올리면 잠깐 설명이 뜸"""
+    tip = {}
+
+    def show(_):
+        t = tk.Toplevel(w)
+        t.overrideredirect(True)
+        t.attributes("-topmost", True)
+        tk.Label(t, text=text, font=FONT_S, bg=DARK, fg="#F5EBD3", padx=8, pady=4).pack()
+        t.geometry(f"+{w.winfo_rootx()}+{w.winfo_rooty() + w.winfo_height() + 4}")
+        tip["t"] = t
+
+    def hide(_):
+        t = tip.pop("t", None)
+        if t is not None and t.winfo_exists():
+            t.destroy()
+
+    w.bind("<Enter>", show, add="+")
+    w.bind("<Leave>", hide, add="+")
+    w.bind("<ButtonPress>", hide, add="+")
+    return w
 
 
 def bring_front(win, keep_top=False):
@@ -2293,9 +2319,270 @@ class ImportDialog(tk.Toplevel):
 
 
 # ───────────────────────── 메인 화면 ─────────────────────────
+# ───────────────────────── 라이선스 ─────────────────────────
+LIC_CHECK_MS = 10 * 60 * 1000     # 10분마다 서버에서 키 상태 확인
+LIC_GRACE_SEC = 3 * 86400         # 인터넷이 끊겨도 마지막 확인 후 3일까지는 사용 가능
+
+
+def machine_hwid():
+    """이 PC 고유값 (윈도우 설치 고유번호 기반, 원문은 보내지 않고 해시만)"""
+    import hashlib
+    raw = ""
+    if IS_WIN:
+        try:
+            import winreg
+            k = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography", 0,
+                               winreg.KEY_READ | 0x0100)   # 64비트 레지스트리
+            raw = winreg.QueryValueEx(k, "MachineGuid")[0]
+        except OSError:
+            raw = ""
+    if not raw:
+        import uuid
+        raw = f"{uuid.getnode():x}"
+    return hashlib.sha256(f"workdiary|{raw}".encode()).hexdigest()[:24]
+
+
+def pc_label():
+    return f'{os.environ.get("COMPUTERNAME", "PC")} ({os.environ.get("USERNAME", "")})'[:80]
+
+
+def lic_request(path, key, device, user_name=""):
+    """서버에 키 확인. 반환: (상태, 응답) 상태 = ok / not_found / revoked / expired / other_pc / net / noserver"""
+    try:
+        r = worker_call(path, {"key": key, "device": device, "hwid": machine_hwid(), "pc_name": pc_label(),
+                               "version": APP_VERSION, "user_name": user_name})
+        return ("ok", r) if r.get("ok") else ("net", {"message": "서버 응답 오류"})
+    except urllib.error.HTTPError as e:
+        try:
+            j = json.loads(e.read().decode("utf-8") or "{}")
+        except Exception:
+            j = {}
+        err = j.get("error", "")
+        if e.code == 404 and err in ("", "not found"):
+            return "noserver", {}            # 서버에 아직 라이선스 기능이 없음 (1_서버배포.bat 전)
+        if err in ("not_found", "revoked", "expired", "other_pc"):
+            return err, j
+        return "net", {"message": f"서버 오류 ({e.code})"}
+    except Exception as e:
+        return "net", {"message": f"인터넷 연결을 확인해 주세요 ({e.__class__.__name__})"}
+
+
+def lic_save(db, r):
+    db.set("license_key", r.get("key", db.get("license_key")))
+    db.set("lic_name", r.get("name", ""))
+    if r.get("user_name"):
+        db.set("lic_user", r["user_name"])
+    db.set("lic_expires", str(int(r.get("expires") or 0)))
+    db.set("lic_capture", "1" if r.get("capture") else "0")
+    db.set("lic_ok_at", str(int(time.time())))
+
+
+def lic_cached_ok(db):
+    """인터넷이 안 될 때: 최근 3일 안에 확인됐고 만료 전이면 사용 허용"""
+    try:
+        ok_at, exp = int(db.get("lic_ok_at", "0") or 0), int(db.get("lic_expires", "0") or 0)
+    except ValueError:
+        return False
+    t = time.time()
+    return db.get("license_key") and ok_at and t - ok_at < LIC_GRACE_SEC and (exp == 0 or exp > t)
+
+
+# 화면 캡처 막기 (윈도우 10 2004 이상: 캡처·녹화·원격화면에서 창이 안 보임 / 그 이전: 검은 화면)
+CAPTURE = {"allow": True}
+
+
+def _set_affinity(w, allow):
+    if not IS_WIN:
+        return
+    try:
+        hwnd = int(w.wm_frame(), 16)
+        u = ctypes.windll.user32
+        if allow:
+            u.SetWindowDisplayAffinity(hwnd, 0)
+        elif not u.SetWindowDisplayAffinity(hwnd, 0x11):
+            u.SetWindowDisplayAffinity(hwnd, 0x01)
+    except Exception:
+        pass
+
+
+def _all_toplevels(root):
+    out, stack = [root], [root]
+    while stack:
+        for c in stack.pop().winfo_children():
+            if isinstance(c, tk.Toplevel):
+                out.append(c)
+            stack.append(c)
+    return out
+
+
+def install_capture_guard(root):
+    def on_map(e):
+        if isinstance(e.widget, (tk.Tk, tk.Toplevel)):
+            _set_affinity(e.widget, CAPTURE["allow"])
+    root.bind_class("Toplevel", "<Map>", on_map, add="+")
+    root.bind_class("Tk", "<Map>", on_map, add="+")
+
+
+def set_capture_allowed(root, allow):
+    if CAPTURE["allow"] == allow:
+        return
+    CAPTURE["allow"] = allow
+    for w in _all_toplevels(root):
+        try:
+            if w.winfo_ismapped():
+                _set_affinity(w, allow)
+        except tk.TclError:
+            pass
+
+
+class KeyDialog(tk.Toplevel):
+    """라이선스 키 입력 창 (처음 실행 / 정지·만료 시)"""
+
+    def __init__(self, root, db, device, on_ok, message="", checking=False):
+        super().__init__(root)
+        self.db, self.device, self.on_ok = db, device, on_ok
+        self.title(f"{APP_TITLE} - 라이선스")
+        self.configure(bg=BG)
+        self.resizable(False, False)
+        hd = tk.Frame(self, bg=DARK, padx=22, pady=14)
+        hd.pack(fill="x")
+        tk.Label(hd, text="◆ 업무 다이어리", font=(F, 15, "bold"), fg=GOLD_BR, bg=DARK).pack(anchor="w")
+        tk.Label(hd, text="라이선스 확인", font=FONT_S, fg="#B9A57A", bg=DARK).pack(anchor="w")
+        tk.Frame(self, bg=ACCENT, height=2).pack(fill="x")
+        f = tk.Frame(self, bg=BG, padx=24, pady=18)
+        f.pack(fill="both")
+        self.msg = tk.Label(f, text=message, font=FONT_B, fg=SUN, bg=BG, wraplength=380, justify="left")
+        self.msg.pack(anchor="w", pady=(0, 8))
+        tk.Label(f, text="사용하시는 분 이름", font=FONT_B, bg=BG).pack(anchor="w")
+        self.name_var = tk.StringVar(value=db.get("lic_user"))
+        self.name_ent = tk.Entry(f, textvariable=self.name_var, font=(F, 13), width=22)
+        self.name_ent.pack(fill="x", pady=(6, 12), ipady=4)
+        tk.Label(f, text="판매자에게 받은 라이선스 키", font=FONT_B, bg=BG).pack(anchor="w")
+        self.var = tk.StringVar(value=db.get("license_key"))
+        self.ent = tk.Entry(f, textvariable=self.var, font=("Consolas", 16, "bold"), justify="center", width=22)
+        self.ent.pack(fill="x", pady=(8, 4), ipady=6)
+        tk.Label(f, text="예) WD-ABCD-EFGH-JKLM   ·   키 1개는 PC 1대에서만 쓸 수 있어요", font=FONT_S, fg=MUTED,
+                 bg=BG).pack(anchor="w")
+        tk.Label(f, text=f"이 PC: {pc_label()}", font=FONT_S, fg=MUTED, bg=BG).pack(anchor="w", pady=(2, 0))
+        bf = tk.Frame(f, bg=BG)
+        bf.pack(fill="x", pady=(16, 0))
+        self.ok_btn = btn(bf, "확인", self.submit, primary=True)
+        self.ok_btn.pack(side="right")
+        btn(bf, "종료", self.quit_app).pack(side="right", padx=6)
+        self.state_lbl = tk.Label(bf, font=FONT_S, fg=MUTED, bg=BG)
+        self.state_lbl.pack(side="left")
+        self.ent.bind("<Return>", lambda e: self.submit())
+        self.name_ent.bind("<Return>", lambda e: self.ent.focus_set())
+        self.protocol("WM_DELETE_WINDOW", self.quit_app)
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() - self.winfo_reqwidth()) // 2
+        y = (self.winfo_screenheight() - self.winfo_reqheight()) // 3
+        self.geometry(f"+{x}+{y}")
+        bring_front(self)
+        (self.ent if self.name_var.get().strip() else self.name_ent).focus_set()
+        if checking:
+            self.busy("확인 중…")
+
+    def busy(self, text):
+        self.ok_btn.config(state="disabled")
+        self.state_lbl.config(text=text, fg=MUTED)
+
+    def quit_app(self):
+        try:
+            self.master.destroy()
+        except tk.TclError:
+            pass
+
+    def submit(self):
+        key = re.sub(r"\s+", "", self.var.get().strip().upper())
+        name = self.name_var.get().strip()
+        if not name:
+            self.msg.config(text="이름을 입력해 주세요.")
+            self.name_ent.focus_set()
+            return
+        if not key:
+            self.msg.config(text="라이선스 키를 입력해 주세요.")
+            self.ent.focus_set()
+            return
+        self.db.set("lic_user", name)
+        self.busy("서버에서 확인 중…")
+        res = {}
+        threading.Thread(target=lambda: res.setdefault("r", lic_request("/api/lic/activate", key, self.device, name)),
+                         daemon=True).start()
+
+        def poll():
+            if "r" not in res:
+                self.after(150, poll)
+                return
+            st, r = res["r"]
+            self.ok_btn.config(state="normal")
+            self.state_lbl.config(text="")
+            if st == "ok":
+                lic_save(self.db, r)
+                self.destroy()
+                self.on_ok(r)
+            elif st == "noserver":
+                self.db.set("license_key", key)
+                self.destroy()
+                self.on_ok({})
+            else:
+                self.msg.config(text=r.get("message") or "확인하지 못했어요.")
+        poll()
+
+
+def lic_start(root, db, device, on_ok):
+    """시작할 때 라이선스 확인 → 통과하면 on_ok(정보)"""
+    key = db.get("license_key")
+    res = {}
+
+    def run():
+        k = key
+        if not k and ADMIN_PASS:     # 관리자 본인 PC: 본인 키 자동 발급
+            try:
+                k = http_json(WORKER_URL.rstrip("/") + "/api/admin/selfkey", {}, {"X-Admin": ADMIN_PASS}).get("key", "")
+            except Exception:
+                k = ""
+        if k:
+            res["r"] = lic_request("/api/lic/activate", k, device)
+        else:                        # 키 없음: 서버에 라이선스 기능이 있는지만 확인 (없으면 그냥 시작)
+            st, _ = lic_request("/api/lic/check", "WD-0000-0000-0000", device)
+            res["r"] = ("noserver", {}) if st == "noserver" else ("none", {})
+
+    threading.Thread(target=run, daemon=True).start()
+    box = {}
+
+    def poll(n=0):
+        if "r" not in res:
+            if n == 3 and "dlg" not in box:      # 0.5초 넘게 걸리면 '확인 중' 창 표시
+                box["dlg"] = KeyDialog(root, db, device, on_ok, checking=True)
+            root.after(150, lambda: poll(n + 1))
+            return
+        st, r = res["r"]
+        dlg = box.get("dlg")
+        if st == "ok":
+            lic_save(db, r)
+            if dlg and dlg.winfo_exists():
+                dlg.destroy()
+            on_ok(r)
+            return
+        if st == "noserver" or (st == "net" and lic_cached_ok(db)):
+            if dlg and dlg.winfo_exists():
+                dlg.destroy()
+            on_ok({})
+            return
+        msg = "" if st == "none" else r.get("message", "")
+        if dlg and dlg.winfo_exists():
+            dlg.msg.config(text=msg)
+            dlg.ok_btn.config(state="normal")
+            dlg.state_lbl.config(text="")
+        else:
+            KeyDialog(root, db, device, on_ok, message=msg)
+    poll()
+
+
 class App:
-    def __init__(self, root):
-        self.root, self.db = root, DB(DB_PATH)
+    def __init__(self, root, db=None):
+        self.root, self.db = root, (db or DB(DB_PATH))
         self.note_windows, self.member_windows = {}, {}
         today = dt.date.today()
         self.year, self.month, self.sel_date = today.year, today.month, today
@@ -2352,6 +2639,11 @@ class App:
         root.after(5000, self.check_phone_link)
         root.after(3000, lambda: self.check_update(startup=True))   # 켤 때: 새 버전 있으면 바로 설치
         self._update_timer()
+        self._locked = False
+        install_capture_guard(root)
+        if WORKER_URL:
+            set_capture_allowed(root, self.db.get("lic_capture", "1") == "1")
+            root.after(LIC_CHECK_MS, self.lic_tick)
 
     # 가운데 칸막이 위치: 기본 6:4, 사용자가 옮기면 비율로 기억
     def restore_split(self):
@@ -2646,8 +2938,11 @@ class App:
         tk.Label(hdr, text="👥 집중 관리 회원", font=FONT_T, fg=ACCENT_DK, bg=BG).pack(side="left", anchor="n")
         fb = FlowBar(hdr, bg=BG)
         fb.pack(side="left", fill="x", expand=True, padx=(10, 0))
-        fb.add(btn(fb, "+ 회원 추가", lambda: self.open_member(None), primary=True))
         fb.add(btn(fb, "삭제", self.member_delete))
+        for text, where, tip in (("⏫", "top", "맨 위로  (Ctrl+Home)"), ("▲", "up", "위로  (Ctrl+↑)"),
+                                 ("▼", "down", "아래로  (Ctrl+↓)"), ("⏬", "bottom", "맨 아래로  (Ctrl+End)")):
+            tooltip(fb.add(btn(fb, text, lambda w=where: self.member_move(w), padx=9)), tip)
+        fb.add(btn(fb, "+ 회원 추가", lambda: self.open_member(None), primary=True))
 
         sr = tk.Frame(p, bg=BG)
         sr.pack(fill="x", pady=(0, 4))
@@ -2734,7 +3029,7 @@ class App:
     def do_sync(self):
         """웹앱 동기화: PC에서 바뀐 것 올리기 + 웹앱에서 바뀐 것 받아오기 (폰 알림도 서버가 일정에서 계산)"""
         self._sync_job = None
-        if not WORKER_URL:
+        if not WORKER_URL or getattr(self, "_locked", False):
             return
         if self._sync_busy:
             self._sync_again = True
@@ -2770,6 +3065,9 @@ class App:
                 if res.get("code") == 404:
                     self._legacy_until = time.time() + 600
                     self.do_sync_legacy()
+                elif res.get("code") == 403:          # 라이선스 문제 → 바로 확인
+                    self._sync_state = "라이선스 확인 필요"
+                    self.lic_check_now()
                 else:
                     self._sync_state = f"서버 동기화 실패 ({res['e'].__class__.__name__}) — 잠시 뒤 다시 시도"
             else:
@@ -2830,6 +3128,76 @@ class App:
                 w.destroy()
             elif ("note", r["uid"]) in touched:
                 w.apply_remote(r)
+
+    # ---------- 라이선스 (10분마다 확인, 정지·만료면 잠금) ----------
+    def lic_tick(self):
+        self.root.after(LIC_CHECK_MS, self.lic_tick)
+        self.lic_check_now()
+
+    def lic_check_now(self):
+        if self._locked or getattr(self, "_lic_busy", False):
+            return
+        key = self.db.get("license_key")
+        if not key:
+            if self.db.get("lic_ok_at"):
+                self.lic_lock("라이선스 키를 입력해 주세요.")
+            return
+        self._lic_busy = True
+        res = {}
+        threading.Thread(target=lambda: res.setdefault("r", lic_request("/api/lic/check", key, self.device_id)),
+                         daemon=True).start()
+
+        def poll():
+            if "r" not in res:
+                self.root.after(300, poll)
+                return
+            self._lic_busy = False
+            st, r = res["r"]
+            if st == "ok":
+                lic_save(self.db, r)
+                set_capture_allowed(self.root, bool(r.get("capture")))
+            elif st == "noserver":
+                pass
+            elif st == "net":
+                if not lic_cached_ok(self.db):
+                    self.lic_lock("인터넷에 연결되지 않아 라이선스를 확인하지 못했어요.\n인터넷 연결 후 [확인]을 눌러 주세요.")
+            else:
+                self.lic_lock(r.get("message") or "라이선스를 사용할 수 없어요.")
+        poll()
+
+    def lic_lock(self, message):
+        """라이선스 정지·만료: 내용 저장 → 창 모두 닫고 키 입력 창만"""
+        if self._locked:
+            return
+        self._locked = True
+        try:
+            self.flush_diary()
+            for w in list(self.member_windows.values()):
+                if w.winfo_exists():
+                    w.save(quiet=True)
+            for w in list(self.note_windows.values()):
+                if w.winfo_exists():
+                    w.close()
+        except Exception:
+            pass
+        self.member_windows.clear()
+        self.note_windows.clear()
+        for w in self.root.winfo_children():
+            if isinstance(w, tk.Toplevel):
+                try:
+                    w.destroy()
+                except tk.TclError:
+                    pass
+        self.root.withdraw()
+
+        def unlocked(r):
+            self._locked = False
+            set_capture_allowed(self.root, bool(r.get("capture", True)))
+            self.root.deiconify()
+            bring_front(self.root)
+            self.refresh_all()
+            self.refresh_notes()
+        KeyDialog(self.root, self.db, self.device_id, unlocked, message=message)
 
     def do_sync_legacy(self):
         on, _, topic = phone_cfg(self.db)
@@ -3373,6 +3741,10 @@ class App:
         try:
             while True:
                 kind, hwnd = self.hk_queue.get_nowait()
+                if self._locked:
+                    if kind == "f9_done":
+                        self._f9_busy = False
+                    continue
                 if kind == "capture":
                     self.import_ekdm(hwnd)
                 elif kind == "f9":
@@ -3447,6 +3819,8 @@ class App:
     # ---------- 알림 ----------
     def check_alarms(self):
         try:
+            if self._locked:
+                return
             nowk = now().strftime("%Y-%m-%d %H:%M")
             rows = self.db.q("SELECT a.id AS aid, a.fire_at, a.offset_min, s.* FROM alarms a "
                              "JOIN schedules s ON s.id=a.schedule_id "
@@ -3518,7 +3892,21 @@ if __name__ == "__main__":
     try:
         root = tk.Tk()
         root.report_callback_exception = lambda *exc: write_crash("".join(traceback.format_exception(*exc)))
-        App(root)
+        if WORKER_URL:      # 배포판: 라이선스 확인 후 시작
+            root.withdraw()
+            _db = DB(DB_PATH)
+            _dev = _db.get("device_id")
+            if not _dev:
+                _dev = "".join(random.choices(string.ascii_lowercase + string.digits, k=16))
+                _db.set("device_id", _dev)
+
+            def _go(info):
+                App(root, _db)
+                root.deiconify()
+                bring_front(root)
+            lic_start(root, _db, _dev, _go)
+        else:
+            App(root)
         root.mainloop()
     except Exception:
         err = traceback.format_exc()
